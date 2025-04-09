@@ -69,21 +69,23 @@ def main():
 
             if not player.is_moving:
                 if method == "greedy":
-                    ai_move = get_best_move(player, boxes, targets, move_count)
+                    ai_move = get_best_move(player, boxes, targets)
                     if ai_move:
                         collision_box = player.collision(ai_move, boxes)
+                        # Eğer kutuya çarptıysa
                         if collision_box and not collision_box.target_reached and not collision_box.is_moving:
                             if collision_box.can_push(ai_move, boxes):
                                 collision_box.move(ai_move, boxes, targets)
                                 player.move(ai_move)
                         elif not collision_box:
                             player.move(ai_move)
-                        move_count += 1
+
                 elif method == "astar":
                     if move_index < len(solution):
                         current_move = solution[move_index]
                         print("A* seçilen hamle:", current_move)
                         collision_box = player.collision(current_move, boxes)
+                        # Oyuncu kutuya çarptıysa
                         if collision_box:
                             if collision_box.can_push(current_move, boxes):
                                 collision_box.move(current_move, boxes, targets)
@@ -91,6 +93,7 @@ def main():
                         else:
                             player.move(current_move)
                         move_index += 1
+
                 elif method == "bfs":
                     if move_index < len(solution):
                         current_move = solution[move_index]
