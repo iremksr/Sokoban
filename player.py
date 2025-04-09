@@ -46,6 +46,7 @@ class Player:
                 self.y = self.target_y
             if self.x == self.target_x and self.y == self.target_y:
                 self.is_moving = False
+                
     # Kutuya çarptı mı kontorl et
     def collision(self, direction, boxes):
         for box in boxes:

@@ -6,169 +6,8 @@ import random
 from collections import deque
 from constants import ROWS, COLS
 
-# BFS çözümü için oyunun duurmlarını belirle 
-class GameState:
-    def __init__(self, player_pos, box_positions, path=[]):
-        self.player_pos = player_pos  # (row, col)
-        self.box_positions = tuple(sorted(box_positions))  
-        self.path = path  # Bulunan çözüm yolu
-
-    def __hash__(self):
-        return hash((self.player_pos, self.box_positions))
-
-    def __eq__(self, other):
-        return (self.player_pos == other.player_pos and
-                self.box_positions == other.box_positions)
-
-def is_goal_state(state, targets):
-    for box in state.box_positions:
-        box_pos = box   # Box nesnesinin pozisyonunu al
-        return all(box_pos in targets for box_pos in state.box_positions)
-
-def move_pos(pos, direction):
-    row, col = pos
-    if direction == "UP": return (row-1, col)
-    if direction == "DOWN": return (row+1, col)
-    if direction == "LEFT": return (row, col-1)
-    if direction == "RIGHT": return (row, col+1)
-
-# BFS çözümü
-def bfs_solve(initial_state, targets):
-    visited = set() # Daha önceden gidilmiş konumları tutar
-    queue = deque([initial_state])
-
-    while queue:
-        state = queue.popleft()
-
-        # Debug: Şu anki durum
-        print(f"Checking state with player at {state.player_pos} and box positions {state.box_positions}")
-
-        # Hedef durumu kontrol et
-        if is_goal_state(state, targets):
-            print("Goal state found!")
-            return state.path
-
-        # Eğer bu durum daha önce ziyaret edildiyse, atla
-        if state in visited:
-            print(f"State with player at {state.player_pos} already visited, skipping...")
-            continue
-        visited.add(state)
-
-        # Her yön için hareket et
-        for direction in ["UP", "DOWN", "LEFT", "RIGHT"]:
-            new_player_pos = move_pos(state.player_pos, direction)
-
-            # Hareketin geçerli olup olmadığını kontrol et
-            if not (0 <= new_player_pos[0] < ROWS and 0 <= new_player_pos[1] < COLS):
-                print(f"Move {direction} out of bounds, skipping...")
-                continue
-
-            new_box_positions = list(state.box_positions)
-
-            # Eğer oyuncu kutuya çarptıysa kutuyu hareket ettir
-            if new_player_pos in new_box_positions:
-                box_index = new_box_positions.index(new_player_pos)
-                new_box_pos = move_pos(new_box_positions[box_index], direction)
-
-                # Kutunun geçerli alana yerleşip yerleşemeyeceğini kontrol et
-                if (not (0 <= new_box_pos[0] < ROWS and 0 <= new_box_pos[1] < COLS)) or (new_box_pos in new_box_positions):
-                    print(f"Move {direction} blocked by another box or out of bounds, skipping...")
-                    continue
-
-                new_box_positions[box_index] = new_box_pos
-
-            # Yeni durumu oluştur ve kuyruğa ekle
-            new_state = GameState(new_player_pos, new_box_positions, state.path + [direction])
-            print(f"Adding new state with player at {new_player_pos} and box positions {new_box_positions}")
-            queue.append(new_state)
-
-    print("No solution found.")
-    return None
 
 
-def astar_search(initial_player, initial_boxes, targets):
-    # Başlangıç durumu: oyuncunun ve kutuların koordinatları
-    start_state = (initial_player.row, initial_player.col,
-                   tuple(sorted((box.row, box.col) for box in initial_boxes)))
-    print("A* Başlangıç Durumu:", start_state)
-    
-    # Başlangıç heuristiği hesaplanıyor
-    h = simple_heuristic(initial_player, initial_boxes, targets)
-    
-    # A* için açık liste (öncelik kuyruğu)
-    open_set = []
-    heapq.heappush(open_set, (h, 0, start_state, [], initial_player.clone(), [box.clone() for box in initial_boxes]))
-    
-    # Ziyaret edilen durumlar ve maliyetleri
-    visited = {start_state: 0}
-
-    while open_set:
-        f, g, state, path, player, boxes = heapq.heappop(open_set)
-        time.sleep(0.0005)  # CPU’yu biraz dinlendirmek için küçük bir bekleme
-
-        # Hedef duruma ulaşıldıysa yolu döndür
-        if is_boxes_in_targets(boxes, targets):
-            print("A* Çözüm Bulundu! Path:", path)
-            return path
-
-        # Dört yöne hareket denemesi
-        for move in ["UP", "DOWN", "LEFT", "RIGHT"]:
-            new_player = player.clone()
-            new_boxes = [box.clone() for box in boxes]
-
-            # Oyuncunun hareketinde kutuya çarpıp çarpmadığı kontrol edilir
-            collision_box = new_player.collision(move, new_boxes)
-            valid_move = False
-
-            if collision_box:
-                # Kutuyu itebiliyorsa hem kutu hem oyuncu hareket eder
-                if collision_box.can_push(move, new_boxes):
-                    collision_box.simulate_move(move)
-                    new_player.simulate_move(move)
-                    valid_move = True
-            else:
-                # Engel yoksa oyuncu hareket eder
-                new_player.simulate_move(move)
-                valid_move = True
-
-            if not valid_move:
-                continue
-
-            # Yeni durum oluşturuluyor
-            new_state = (new_player.row, new_player.col,
-                         tuple(sorted((box.row, box.col) for box in new_boxes)))
-            new_g = g + 1
-
-            # Daha önce daha iyi bir yol bulunduysa geç
-            if new_state in visited and visited[new_state] <= new_g:
-                continue
-
-            visited[new_state] = new_g
-            new_h = simple_heuristic(new_player, new_boxes, targets)
-            new_f = new_g + new_h
-            new_path = path + [move]
-
-            # Yeni durum kuyruğa ekleniyor
-            heapq.heappush(open_set, (new_f, new_g, new_state, new_path, new_player, new_boxes))
-
-    print("A* algoritması çözüm bulamadı!")
-    return None
-
-#Her kutu hedef pozisyonda mı kontrol eder.
-def is_boxes_in_targets(boxes, targets):
-    return all((box.row, box.col) in targets for box in boxes)
-
-"""   Aday kutu–hedef çifti üzerinden hesaplar:
-   (oyuncunun seçilen kutuya mesafesi) + (kutunun hedefe mesafesi)
-    """
-def simple_heuristic(player, boxes, targets):
-    
-    candidate_box, candidate_target = get_candidate_box_target(player, boxes, targets)
-    if candidate_box is None or candidate_target is None:
-        return 0
-    dist_player_box = abs(player.row - candidate_box.row) + abs(player.col - candidate_box.col)
-    dist_box_target = abs(candidate_box.row - candidate_target[0]) + abs(candidate_box.col - candidate_target[1])
-    return dist_player_box + dist_box_target
 
 def get_candidate_box_target(player, boxes, targets):
     """Henüz tamamlanmamış kutulardan oyuncuya en yakın olanı ve onun en yakın hedefini seçer.
@@ -281,6 +120,20 @@ def get_adaptive_reposition_move(player, ideal_tile, boxes):
         return "RIGHT"
     return None
 
+
+"""   Aday kutu–hedef çifti üzerinden hesaplar:
+   (oyuncunun seçilen kutuya mesafesi) + (kutunun hedefe mesafesi)
+    """
+def simple_heuristic(player, boxes, targets):
+    
+    candidate_box, candidate_target = get_candidate_box_target(player, boxes, targets)
+    if candidate_box is None or candidate_target is None:
+        return 0
+    dist_player_box = abs(player.row - candidate_box.row) + abs(player.col - candidate_box.col)
+    dist_box_target = abs(candidate_box.row - candidate_target[0]) + abs(candidate_box.col - candidate_target[1])
+    return dist_player_box + dist_box_target
+
+
 def get_best_move(player, boxes, targets):
     # Hedef kutu ve hedef kare seçiliyor
     candidate_box, candidate_target = get_candidate_box_target(player, boxes, targets)
@@ -331,3 +184,158 @@ def get_best_move(player, boxes, targets):
                 best_move = move
 
     return best_move  # En iyi hamle döndürülür
+
+
+#Her kutu hedef pozisyonda mı kontrol eder.
+def is_boxes_in_targets(boxes, targets):
+    return all((box.row, box.col) in targets for box in boxes)
+
+
+def astar_search(initial_player, initial_boxes, targets):
+    # Başlangıç durumu: oyuncunun ve kutuların koordinatları
+    start_state = (initial_player.row, initial_player.col,
+                   tuple(sorted((box.row, box.col) for box in initial_boxes)))
+    print("A* Başlangıç Durumu:", start_state)
+    
+    # Başlangıç heuristiği hesaplanıyor
+    h = simple_heuristic(initial_player, initial_boxes, targets)
+    
+    # A* için açık liste (öncelik kuyruğu)
+    open_set = []
+    heapq.heappush(open_set, (h, 0, start_state, [], initial_player.clone(), [box.clone() for box in initial_boxes]))
+    
+    # Ziyaret edilen durumlar ve maliyetleri
+    visited = {start_state: 0}
+
+    while open_set:
+        f, g, state, path, player, boxes = heapq.heappop(open_set)
+        time.sleep(0.0005)  # CPU’yu biraz dinlendirmek için küçük bir bekleme
+
+        # Hedef duruma ulaşıldıysa yolu döndür
+        if is_boxes_in_targets(boxes, targets):
+            print("A* Çözüm Bulundu! Path:", path)
+            return path
+
+        # Dört yöne hareket denemesi
+        for move in ["UP", "DOWN", "LEFT", "RIGHT"]:
+            new_player = player.clone()
+            new_boxes = [box.clone() for box in boxes]
+
+            # Oyuncunun hareketinde kutuya çarpıp çarpmadığı kontrol edilir
+            collision_box = new_player.collision(move, new_boxes)
+            valid_move = False
+
+            if collision_box:
+                # Kutuyu itebiliyorsa hem kutu hem oyuncu hareket eder
+                if collision_box.can_push(move, new_boxes):
+                    collision_box.simulate_move(move)
+                    new_player.simulate_move(move)
+                    valid_move = True
+            else:
+                # Engel yoksa oyuncu hareket eder
+                new_player.simulate_move(move)
+                valid_move = True
+
+            if not valid_move:
+                continue
+
+            # Yeni durum oluşturuluyor
+            new_state = (new_player.row, new_player.col,
+                         tuple(sorted((box.row, box.col) for box in new_boxes)))
+            new_g = g + 1
+
+            # Daha önce daha iyi bir yol bulunduysa geç
+            if new_state in visited and visited[new_state] <= new_g:
+                continue
+
+            visited[new_state] = new_g
+            new_h = simple_heuristic(new_player, new_boxes, targets)
+            new_f = new_g + new_h
+            new_path = path + [move]
+
+            # Yeni durum kuyruğa ekleniyor
+            heapq.heappush(open_set, (new_f, new_g, new_state, new_path, new_player, new_boxes))
+
+    print("A* algoritması çözüm bulamadı!")
+    return None
+
+
+# BFS çözümü için oyunun duurmlarını belirle 
+class GameState:
+    def __init__(self, player_pos, box_positions, path=[]):
+        self.player_pos = player_pos  # (row, col)
+        self.box_positions = tuple(sorted(box_positions))  
+        self.path = path  # Bulunan çözüm yolu
+
+    def __hash__(self):
+        return hash((self.player_pos, self.box_positions))
+
+    def __eq__(self, other):
+        return (self.player_pos == other.player_pos and
+                self.box_positions == other.box_positions)
+
+def is_goal_state(state, targets):
+    for box in state.box_positions:
+        box_pos = box   # Box nesnesinin pozisyonunu al
+        return all(box_pos in targets for box_pos in state.box_positions)
+
+def move_pos(pos, direction):
+    row, col = pos
+    if direction == "UP": return (row-1, col)
+    if direction == "DOWN": return (row+1, col)
+    if direction == "LEFT": return (row, col-1)
+    if direction == "RIGHT": return (row, col+1)
+
+# BFS çözümü
+def bfs_solve(initial_state, targets):
+    visited = set() # Daha önceden gidilmiş konumları tutar
+    queue = deque([initial_state])
+
+    while queue:
+        state = queue.popleft()
+
+        # Debug: Şu anki durum
+        print(f"Checking state with player at {state.player_pos} and box positions {state.box_positions}")
+
+        # Hedef durumu kontrol et
+        if is_goal_state(state, targets):
+            print("Goal state found!")
+            return state.path
+
+        # Eğer bu durum daha önce ziyaret edildiyse, atla
+        if state in visited:
+            print(f"State with player at {state.player_pos} already visited, skipping...")
+            continue
+        visited.add(state)
+
+        # Her yön için hareket et
+        for direction in ["UP", "DOWN", "LEFT", "RIGHT"]:
+            new_player_pos = move_pos(state.player_pos, direction)
+
+            # Hareketin geçerli olup olmadığını kontrol et
+            if not (0 <= new_player_pos[0] < ROWS and 0 <= new_player_pos[1] < COLS):
+                print(f"Move {direction} out of bounds, skipping...")
+                continue
+
+            new_box_positions = list(state.box_positions)
+
+            # Eğer oyuncu kutuya çarptıysa kutuyu hareket ettir
+            if new_player_pos in new_box_positions:
+                box_index = new_box_positions.index(new_player_pos)
+                new_box_pos = move_pos(new_box_positions[box_index], direction)
+
+                # Kutunun geçerli alana yerleşip yerleşemeyeceğini kontrol et
+                if (not (0 <= new_box_pos[0] < ROWS and 0 <= new_box_pos[1] < COLS)) or (new_box_pos in new_box_positions):
+                    print(f"Move {direction} blocked by another box or out of bounds, skipping...")
+                    continue
+
+                new_box_positions[box_index] = new_box_pos
+
+            # Yeni durumu oluştur ve kuyruğa ekle
+            new_state = GameState(new_player_pos, new_box_positions, state.path + [direction])
+            print(f"Adding new state with player at {new_player_pos} and box positions {new_box_positions}")
+            queue.append(new_state)
+
+    print("No solution found.")
+    return None
+
